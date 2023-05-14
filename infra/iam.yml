@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: roles and policies
+
+Resources:
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "EcrAccessCloudWatchAccess"
+                Effect: Allow
+                Action:
+                  # ECS Tasks to download images from ECR
+                  - "ecr:GetAuthorizationToken"
+                  - "ecr:BatchCheckLayerAvailability"
+                  - "ecr:GetDownloadUrlForLayer"
+                  - "ecr:BatchGetImage"
+                  # ECS tasks to upload logs to CloudWatch
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskRolePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "DynamoDBTableAccess"
+                Effect: Allow
+                Action:
+                  # ECS tasks to work on database
+                  - "dynamodb:PutItem"
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                Resource:
+                  [
+                    "arn:aws:dynamodb:ap-southeast-1:534288293305:table/shipfast_orders",
+                    "arn:aws:dynamodb:ap-southeast-1:534288293305:table/shipfast_users",
+                  ]
+
+Outputs:
+  ECSTaskExecutionRole:
+    Description: ECS Task Execution Role
+    Value: !GetAtt "ECSTaskExecutionRole.Arn"
+    Export:
+      Name: "ECSTaskExecutionRole"
+
+  ECSTaskRole:
+    Description: ECS Task Role
+    Value: !GetAtt "ECSTaskRole.Arn"
+    Export:
+      Name: "ECSTaskRole"

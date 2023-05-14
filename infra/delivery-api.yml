@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: delivery container on ecs cluster
+
+Resources:
+  Task:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: shipfast-delivery-api
+      Cpu: 256
+      Memory: 512
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !ImportValue ECSTaskExecutionRole
+      TaskRoleArn: !ImportValue ECSTaskRole
+      ContainerDefinitions:
+        - Name: delivery-service-api
+          Image: 534288293305.dkr.ecr.ap-southeast-1.amazonaws.com/delivery-service-api:v2.1
+          Environment:
+            - Name: AWS_DEFAULT_REGION
+              Value: ap-southeast-1
+            - Name: PORT
+              Value: 8000
+          Cpu: 256
+          Memory: 512
+          PortMappings:
+            - ContainerPort: 8000
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: "shipfast-delivery"
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: "delivery-service-api"
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule
+    Properties:
+      ServiceName: delivery-service
+      TaskDefinition: !Ref Task
+      Cluster: !ImportValue "ECSCluster"
+      LaunchType: FARGATE
+      DesiredCount: 2
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 70
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - !ImportValue ShipFast-Subnet1
+            - !ImportValue ShipFast-Subnet2
+          SecurityGroups:
+            - !ImportValue ContainerSecurityGroup
+      LoadBalancers:
+        - ContainerName: delivery-service-api
+          ContainerPort: 8000
+          TargetGroupArn: !Ref TargetGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: delivery-tg
+      VpcId: !ImportValue ShipFast-VPC
+      Port: 80
+      Protocol: HTTP
+      Matcher:
+        HttpCode: 200-299
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /health
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 10
+      TargetType: ip
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !ImportValue Listener
+      Priority: 2
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /api/delivery*
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+
+Outputs:
+  ApiEndpoint:
+    Description: Delivery API Endpoint
+    Value: !Join ["", ["http://", !ImportValue DomainName, "/api/delivery"]]
+    Export:
+      Name: "DeliveryApiEndpoint"

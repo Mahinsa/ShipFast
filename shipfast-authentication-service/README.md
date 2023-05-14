@@ -1,0 +1,1 @@
+# shipfast-auth-service
